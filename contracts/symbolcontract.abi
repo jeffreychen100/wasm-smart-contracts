@@ -1,0 +1,49 @@
+{
+    "version": "eosio::abi/1.1",
+    "structs": [
+        {
+            "name": "StoredData",
+            "base": "",
+            "fields": [
+                {
+                    "name": "id",
+                    "type": "symbol"
+                },
+                {
+                    "name": "text",
+                    "type": "string"
+                }
+            ]
+        },
+        {
+            "name": "save",
+            "base": "",
+            "fields": [
+                {
+                    "name": "id",
+                    "type": "uint64"
+                },
+                {
+                    "name": "text",
+                    "type": "string"
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "name": "save",
+            "type": "save",
+            "ricardian_contract": ""
+        }
+    ],
+    "tables": [
+        {
+            "name": "mytable",
+            "type": "StoredData",
+            "index_type": "i64",
+            "key_names": [],
+            "key_types": []
+        }
+    ]
+}
