@@ -18,6 +18,11 @@ class ParseState(Enum):
     ACTION_PARAMS_NAME = 5
     END = 6
 
+def state_log_wrapper(next_state, debug):
+    if debug:
+        print(f"Changing to {next_state}")
+    return next_state
+
 def read_file(file):
     with open(file, 'r') as file_handle:
         # Read the entire file content
@@ -64,8 +69,6 @@ def actions(names):
     return actions
 def tables():
     return []
-def kv_tables():
-    return {}
 def ricardian_clauses():
     return []
 def variants():
@@ -77,9 +80,12 @@ def main():
     # create parse with our arguments to pass in
     parser = argparse.ArgumentParser(description='Process a contract and create ABI.')
     parser.add_argument('--contract-file', type=str, help='The path to the C++ contract file')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
 
     # get the args error if empty
     args = parser.parse_args()
+    if args.debug:
+        print("Starting in debug mode...")
     if not args.contract_file:
         parser.print_help()
         sys.exit(1)
@@ -88,7 +94,7 @@ def main():
     tokens = simple_tokenizer(read_file(args.contract_file))
 
     # variable to parse and construct ABI
-    parse_state = ParseState.CLEAR
+    parse_state = state_log_wrapper(ParseState.CLEAR, args.debug)
     action_name = []
     current_struct_name = None
     current_struct_fields = []
@@ -98,13 +104,15 @@ def main():
 
     # parse
     for token in tokens:
+        if args.debug:
+            print(f"processing token: {token}")
         # Process high level work
         # Found an action, grab the name, and start parsing params
         if parse_state == ParseState.ACTION_TOP_LEVEL:
             name = clean_token(token)
             action_name.append(name)
             current_struct_name = name
-            parse_state = ParseState.ACTION_PARAMS
+            parse_state = state_log_wrapper(ParseState.ACTION_PARAMS, args.debug)
             # skip to next token
             continue
         # parse params structurs
@@ -112,7 +120,7 @@ def main():
         # when ")" finished set struct
         elif parse_state == ParseState.ACTION_PARAMS:
             if token == "(":
-                parse_state = ParseState.ACTION_PARAMS_TYPE
+                parse_state = state_log_wrapper(ParseState.ACTION_PARAMS_TYPE, args.debug)
                 continue
         # when not a "(" must be a param type or name
         #      First is type
@@ -120,7 +128,7 @@ def main():
         elif parse_state == ParseState.ACTION_PARAMS_TYPE:
             current_struct_param_type = normalize_type(clean_token(token))
             # move state
-            parse_state = ParseState.ACTION_PARAMS_NAME
+            parse_state = state_log_wrapper(ParseState.ACTION_PARAMS_NAME, args.debug)
             # skip to next
             continue
         #      "," means another param comming
@@ -128,10 +136,10 @@ def main():
         elif parse_state == ParseState.ACTION_PARAMS_NAME:
             if token == ",":
                 # move state
-                parse_state = ParseState.ACTION_PARAMS_TYPE
+                parse_state = state_log_wrapper(ParseState.ACTION_PARAMS_TYPE, args.debug)
             elif token == ")":
                 # move state
-                parse_state = ParseState.CLEAR
+                parse_state = state_log_wrapper(ParseState.CLEAR, args.debug)
                 structs.append({
                     "name":copy.deepcopy(current_struct_name),
                     "base":"",
@@ -153,7 +161,7 @@ def main():
 
         # detect and drive top level states
         if token == "ACTION":
-            parse_state = ParseState.ACTION_TOP_LEVEL
+            parse_state = state_log_wrapper(ParseState.ACTION_TOP_LEVEL, args.debug)
 
     # generate abi structure
     abi_struct = {
@@ -163,7 +171,6 @@ def main():
         "structs": generate_structs(structs),
         "actions": actions(action_name),
         "tables": tables(),
-        "kv_tables": kv_tables(),
         "ricardian_clauses": ricardian_clauses(),
         "variants": variants(),
         "action_results": action_results()
