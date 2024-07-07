@@ -12,11 +12,13 @@ from enum import Enum
 
 class ParseState(Enum):
     CLEAR = 1
-    ACTION_TOP_LEVEL = 2
-    ACTION_PARAMS = 3
-    ACTION_PARAMS_TYPE = 4
-    ACTION_PARAMS_NAME = 5
-    END = 6
+    ACTION_RETURN = 2
+    ACTION_TOP_LEVEL = 3
+    EOSIO_ACTION_TOP_LEVEL = 4
+    ACTION_PARAMS = 5
+    ACTION_PARAMS_TYPE = 6
+    ACTION_PARAMS_NAME = 7
+    END = 8
 
 def state_log_wrapper(next_state, debug):
     if debug:
@@ -50,6 +52,8 @@ def clean_token(text):
 def normalize_type(raw_type):
     if raw_type == "uint64_t":
         return "uint64"
+    if raw_type == "uint32_t":
+        return "uint32"
     if raw_type == "std::string":
         return "string"
 
@@ -73,8 +77,8 @@ def ricardian_clauses():
     return []
 def variants():
     return []
-def action_results():
-    return []
+def action_results(structs):
+    return structs
 
 def main():
     # create parse with our arguments to pass in
@@ -96,6 +100,8 @@ def main():
     # variable to parse and construct ABI
     parse_state = state_log_wrapper(ParseState.CLEAR, args.debug)
     action_name = []
+    action_return_struct = []
+    result_type = None
     current_struct_name = None
     current_struct_fields = []
     current_struct_param_type = None
@@ -107,12 +113,32 @@ def main():
         if args.debug:
             print(f"processing token: {token}")
         # Process high level work
-        # Found an action, grab the name, and start parsing params
+        # Found an action no return type, grab the name, and start parsing params
         if parse_state == ParseState.ACTION_TOP_LEVEL:
             name = clean_token(token)
             action_name.append(name)
             current_struct_name = name
             parse_state = state_log_wrapper(ParseState.ACTION_PARAMS, args.debug)
+            # skip to next token
+            continue
+        # Found an action with return type, grab the name, build return struct,
+        #   and start parsing param
+        elif parse_state == ParseState.EOSIO_ACTION_TOP_LEVEL:
+            name = clean_token(token)
+            action_name.append(name)
+            current_struct_name = name
+            action_return_struct.append({
+                "name":copy.deepcopy(current_struct_name),
+                "result_type":copy.deepcopy(result_type)
+            })
+            result_type = None
+            parse_state = state_log_wrapper(ParseState.ACTION_PARAMS, args.debug)
+            # skip to next token
+            continue
+        # action has a return structure process that type before action name
+        elif parse_state == ParseState.ACTION_RETURN:
+            result_type = normalize_type(clean_token(token))
+            parse_state = state_log_wrapper(ParseState.EOSIO_ACTION_TOP_LEVEL, args.debug)
             # skip to next token
             continue
         # parse params structurs
@@ -162,6 +188,8 @@ def main():
         # detect and drive top level states
         if token == "ACTION":
             parse_state = state_log_wrapper(ParseState.ACTION_TOP_LEVEL, args.debug)
+        if token == "eosio::action":
+            parse_state = state_log_wrapper(ParseState.ACTION_RETURN, args.debug)
 
     # generate abi structure
     abi_struct = {
@@ -173,7 +201,7 @@ def main():
         "tables": tables(),
         "ricardian_clauses": ricardian_clauses(),
         "variants": variants(),
-        "action_results": action_results()
+        "action_results": action_results(action_return_struct)
     }
 
     print(json.dumps(abi_struct, indent=4))
